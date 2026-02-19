@@ -1,0 +1,21 @@
+version: "3.9"
+
+services:
+  zylmus:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./frontend:/app/frontend
+    environment:
+      - ZYLMUS_FERNET_KEY=${ZYLMUS_FERNET_KEY}
+      - DATABASE_URL=sqlite:////app/data/zylmus.db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/sync/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
