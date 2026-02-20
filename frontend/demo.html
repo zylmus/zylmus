@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Zylmus — Demo</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <style>/* ─── Reset & Base ─────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body, #root { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+body { background: #f5f6fa; color: #2d3436; }
+
+/* ─── Layout ────────────────────────────────────────────────────── */
+.app { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+.header {
+  height: 56px; flex-shrink: 0;
+  background: #1a1a2e; color: #fff;
+  display: flex; align-items: center; gap: 12px; padding: 0 16px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.3);
+  z-index: 1000;
+}
+.header h1 { font-size: 1.2rem; font-weight: 700; letter-spacing: 0.05em; flex: 1; }
+.header h1 span { color: #a29bfe; }
+
+.main { display: flex; flex: 1; overflow: hidden; }
+
+/* ─── Sidebar ───────────────────────────────────────────────────── */
+.sidebar {
+  width: 380px; flex-shrink: 0;
+  display: flex; flex-direction: column;
+  background: #fff; border-right: 1px solid #dfe6e9;
+  overflow: hidden;
+}
+
+.sidebar-tabs {
+  display: flex; border-bottom: 1px solid #dfe6e9;
+}
+.sidebar-tab {
+  flex: 1; padding: 10px; border: none; background: transparent;
+  cursor: pointer; font-size: 0.85rem; font-weight: 600; color: #636e72;
+  border-bottom: 2px solid transparent; transition: all 0.15s;
+}
+.sidebar-tab.active { color: #6c5ce7; border-bottom-color: #6c5ce7; }
+.sidebar-tab:hover:not(.active) { background: #f5f6fa; }
+
+.sidebar-content { flex: 1; overflow-y: auto; padding: 12px; }
+
+/* ─── Filter Bar ────────────────────────────────────────────────── */
+.filter-bar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.filter-bar input, .filter-bar select {
+  flex: 1; min-width: 80px;
+  padding: 7px 10px; border: 1px solid #dfe6e9; border-radius: 6px;
+  font-size: 0.82rem; background: #f5f6fa; outline: none;
+  transition: border-color 0.15s;
+}
+.filter-bar input:focus, .filter-bar select:focus { border-color: #6c5ce7; background: #fff; }
+
+/* ─── Package Cards ─────────────────────────────────────────────── */
+.package-list { display: flex; flex-direction: column; gap: 8px; }
+
+.package-card {
+  background: #fff; border: 1px solid #dfe6e9; border-radius: 10px;
+  padding: 12px; cursor: pointer; transition: all 0.15s;
+  box-shadow: 0 1px 3px rgba(0,0,0,.04);
+}
+.package-card:hover { border-color: #6c5ce7; box-shadow: 0 2px 8px rgba(108,92,231,.12); }
+.package-card.selected { border-color: #6c5ce7; background: #f3f0ff; }
+
+.card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.card-source-icon { font-size: 1.2rem; }
+.card-title { font-size: 0.8rem; font-weight: 600; color: #636e72; flex: 1; word-break: break-all; }
+.card-delete { background: none; border: none; cursor: pointer; color: #b2bec3; font-size: 0.85rem; padding: 2px 4px; border-radius: 4px; }
+.card-delete:hover { color: #d63031; background: #fff5f5; }
+
+.status-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 12px;
+  font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+}
+.status-pickup_ready { background: #ff7675; color: #fff; }
+.status-delivered    { background: #00b894; color: #fff; }
+.status-in_transit   { background: #fdcb6e; color: #2d3436; }
+.status-expired      { background: #b2bec3; color: #fff; }
+
+.card-locker { font-size: 0.78rem; color: #636e72; margin-top: 4px; }
+.card-locker strong { color: #2d3436; }
+
+.card-address { font-size: 0.78rem; color: #636e72; margin-top: 3px; }
+
+.card-code-row { margin-top: 8px; display: flex; align-items: center; gap: 8px; }
+.code-label { font-size: 0.72rem; color: #636e72; }
+.code-value {
+  font-family: 'Courier New', monospace; font-size: 1rem; font-weight: 700;
+  letter-spacing: 0.15em; color: #6c5ce7; background: #f3f0ff;
+  padding: 2px 8px; border-radius: 6px;
+}
+.code-hidden { letter-spacing: 0.2em; color: #b2bec3; font-family: monospace; font-size: 1rem; }
+.btn-reveal {
+  font-size: 0.72rem; padding: 2px 8px; border-radius: 10px;
+  border: 1px solid #a29bfe; color: #6c5ce7; background: transparent;
+  cursor: pointer; transition: all 0.15s;
+}
+.btn-reveal:hover { background: #6c5ce7; color: #fff; }
+
+.card-date { font-size: 0.7rem; color: #b2bec3; margin-top: 6px; }
+
+.empty-state { text-align: center; padding: 32px 16px; color: #b2bec3; }
+.empty-state p { font-size: 0.9rem; margin-top: 8px; }
+
+/* ─── Accounts Panel ────────────────────────────────────────────── */
+.account-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+.account-row {
+  display: flex; align-items: center; gap: 8px; padding: 10px 12px;
+  background: #f5f6fa; border: 1px solid #dfe6e9; border-radius: 8px;
+}
+.account-info { flex: 1; }
+.account-label { font-size: 0.85rem; font-weight: 600; }
+.account-email { font-size: 0.75rem; color: #636e72; }
+.account-meta  { font-size: 0.7rem; color: #b2bec3; margin-top: 2px; }
+.account-inactive { opacity: 0.5; }
+
+/* ─── Forms ─────────────────────────────────────────────────────── */
+.form-card {
+  background: #f5f6fa; border: 1px solid #dfe6e9; border-radius: 10px;
+  padding: 14px; margin-top: 8px;
+}
+.form-card h3 { font-size: 0.9rem; margin-bottom: 12px; color: #2d3436; }
+.form-field { margin-bottom: 10px; }
+.form-field label { display: block; font-size: 0.75rem; font-weight: 600; color: #636e72; margin-bottom: 4px; }
+.form-field input, .form-field select {
+  width: 100%; padding: 8px 10px;
+  border: 1px solid #dfe6e9; border-radius: 6px; font-size: 0.85rem;
+  background: #fff; outline: none; transition: border-color 0.15s;
+}
+.form-field input:focus, .form-field select:focus { border-color: #6c5ce7; }
+.form-actions { display: flex; gap: 8px; margin-top: 4px; }
+
+/* ─── Buttons ───────────────────────────────────────────────────── */
+.btn {
+  padding: 8px 14px; border-radius: 8px; border: none; cursor: pointer;
+  font-size: 0.82rem; font-weight: 600; transition: all 0.15s; display: inline-flex;
+  align-items: center; gap: 5px;
+}
+.btn-primary   { background: #6c5ce7; color: #fff; }
+.btn-primary:hover   { background: #5a4fcf; }
+.btn-secondary { background: #dfe6e9; color: #2d3436; }
+.btn-secondary:hover { background: #c8d6e5; }
+.btn-danger    { background: #d63031; color: #fff; }
+.btn-danger:hover    { background: #b71c1c; }
+.btn-ghost     { background: transparent; color: #fff; border: 1px solid rgba(255,255,255,0.3); }
+.btn-ghost:hover { background: rgba(255,255,255,0.1); }
+.btn-sm        { padding: 5px 10px; font-size: 0.75rem; }
+.btn:disabled  { opacity: 0.5; cursor: not-allowed; }
+
+.btn-icon {
+  background: none; border: none; cursor: pointer; padding: 4px 6px;
+  border-radius: 6px; transition: background 0.15s; color: #636e72;
+}
+.btn-icon:hover { background: #dfe6e9; }
+
+/* ─── Header Buttons ────────────────────────────────────────────── */
+.header-actions { display: flex; align-items: center; gap: 8px; }
+.sync-dot { width: 8px; height: 8px; border-radius: 50%; background: #55efc4; display: inline-block; }
+.sync-dot.syncing { animation: pulse 1s infinite; background: #fdcb6e; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+/* ─── Map ───────────────────────────────────────────────────────── */
+.map-panel { flex: 1; position: relative; display: flex; flex-direction: column; }
+#map { flex: 1; min-height: 0; }
+
+.route-info-bar {
+  padding: 8px 16px;
+  background: #1a1a2e; color: #fff; font-size: 0.82rem;
+  display: flex; align-items: center; gap: 16px; flex-shrink: 0;
+}
+.route-info-bar span { color: #a29bfe; font-weight: 700; }
+.route-info-bar .btn-sm { margin-left: auto; }
+
+/* ─── Custom Leaflet Markers ────────────────────────────────────── */
+.map-marker {
+  width: 36px; height: 36px; border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 6px rgba(0,0,0,.3);
+}
+.map-marker-inner {
+  transform: rotate(45deg); font-size: 16px;
+  display: flex; align-items: center; justify-content: center;
+  width: 100%; height: 100%;
+}
+.map-marker-num {
+  transform: rotate(45deg); font-size: 12px; font-weight: 700;
+  color: #fff; width: 100%; height: 100%; display: flex;
+  align-items: center; justify-content: center;
+}
+.user-marker {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: #0984e3; color: #fff; font-size: 14px;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 0 0 4px rgba(9,132,227,.3);
+  animation: ping 2s infinite;
+}
+@keyframes ping { 0%,100% { box-shadow: 0 0 0 4px rgba(9,132,227,.3); } 50% { box-shadow: 0 0 0 10px rgba(9,132,227,.05); } }
+
+/* ─── Popup ─────────────────────────────────────────────────────── */
+.popup-content { min-width: 180px; }
+.popup-content h4 { font-size: 0.9rem; margin-bottom: 6px; color: #2d3436; }
+.popup-content p  { font-size: 0.8rem; color: #636e72; margin-bottom: 4px; }
+.popup-pickup-code {
+  font-family: monospace; font-size: 1.3rem; font-weight: 700;
+  color: #6c5ce7; letter-spacing: 0.15em; background: #f3f0ff;
+  padding: 4px 10px; border-radius: 6px; display: block; margin: 8px 0;
+  text-align: center;
+}
+.popup-order { font-size: 0.75rem; color: #b2bec3; }
+
+/* ─── Scrollbar ─────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #dfe6e9; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #b2bec3; }
+
+/* ─── Toast ─────────────────────────────────────────────────────── */
+.toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; }
+.toast {
+  padding: 10px 16px; border-radius: 8px; font-size: 0.82rem; font-weight: 500;
+  box-shadow: 0 4px 12px rgba(0,0,0,.15); animation: slideIn 0.2s ease; max-width: 300px;
+}
+.toast-success { background: #00b894; color: #fff; }
+.toast-error   { background: #d63031; color: #fff; }
+.toast-info    { background: #0984e3; color: #fff; }
+@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+/* ─── Mobile ────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .main { flex-direction: column; }
+  .sidebar { width: 100%; height: 45vh; flex-shrink: 0; }
+  .map-panel { flex: 1; min-height: 200px; }
+  .header h1 { font-size: 1rem; }
+}
+</style>
+</head>
+<body>
+  <div id="root"></div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV/XN2GqnE=" crossorigin=""></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script>
+    // ── MOCK DATA — zastępuje backend ──────────────────────────────
+    const MOCK_PACKAGES = [{"id": 3, "tracking_number": "320699988877766555", "source": "inpost", "carrier": "inpost", "status": "in_transit", "locker_id": null, "pickup_code": null, "address_display": "ul. D\u0142uga 22, 80-831 Gda\u0144sk", "lat": 54.352, "lon": 18.6466, "email_subject": "Twoja przesy\u0142ka jest w drodze", "email_date": "2026-02-20T08:00:00", "email_account_id": null, "created_at": "2026-02-20T07:24:30.699130", "updated_at": "2026-02-20T07:24:30.699132"}, {"id": 2, "tracking_number": "amazon_302-1234567-8901234", "source": "amazon", "carrier": "amazon", "status": "pickup_ready", "locker_id": "KRA15M", "pickup_code": "391847", "address_display": "ul. Floria\u0144ska 5, 31-019 Krak\u00f3w", "lat": 50.0614, "lon": 19.9366, "email_subject": "Twoje zam\u00f3wienie zosta\u0142o dostarczone", "email_date": "2026-02-19T14:00:00", "email_account_id": null, "created_at": "2026-02-20T07:24:30.699129", "updated_at": "2026-02-20T07:24:30.699129"}, {"id": 1, "tracking_number": "320611111222333444", "source": "inpost", "carrier": "inpost", "status": "pickup_ready", "locker_id": "WAW01N", "pickup_code": "847291", "address_display": "ul. Marsza\u0142kowska 1, 00-001 Warszawa", "lat": 52.2297, "lon": 21.0122, "email_subject": "Twoja paczka czeka w paczkomacie", "email_date": "2026-02-18T10:30:00", "email_account_id": null, "created_at": "2026-02-20T07:24:30.699123", "updated_at": "2026-02-20T07:24:30.699128"}, {"id": 4, "tracking_number": "amazon_302-9876543-2109876", "source": "amazon", "carrier": "amazon", "status": "delivered", "locker_id": null, "pickup_code": null, "address_display": "ul. \u015awidnicka 10, 50-068 Wroc\u0142aw", "lat": 51.1079, "lon": 17.0385, "email_subject": "Paczka dostarczona", "email_date": "2026-02-15T12:00:00", "email_account_id": null, "created_at": "2026-02-20T07:24:30.699132", "updated_at": "2026-02-20T07:24:30.699133"}];
+    window._mockPackages = MOCK_PACKAGES;
+    
+    // Override fetch for /api/* calls
+    const _realFetch = window.fetch;
+    window.fetch = function(url, opts) {
+      if (url && url.includes('/api/packages')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ total: MOCK_PACKAGES.length, items: MOCK_PACKAGES })
+        });
+      }
+      if (url && url.includes('/api/accounts')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve([])
+        });
+      }
+      if (url && url.includes('/api/sync')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ message: 'Demo — brak backendu', queued: false })
+        });
+      }
+      if (url && url.includes('/api/route')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ detail: 'Demo — routing niedostępny bez backendu' })
+        });
+      }
+      return _realFetch(url, opts);
+    };
+  </script>
+  <script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+// ─── API helpers ─────────────────────────────────────────────────
+const api = {
+  get: (path) => fetch(`/api${path}`).then(r => r.ok ? r.json() : r.json().then(e => { throw new Error(e.detail || 'Error'); })),
+  post: (path, body) => fetch(`/api${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json()),
+  patch: (path, body) => fetch(`/api${path}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.ok ? r.json() : r.json().then(e => { throw new Error(e.detail || 'Error'); })),
+  delete: (path) => fetch(`/api${path}`, { method: 'DELETE' }).then(r => r.json()),
+};
+
+// ─── Marker helpers ───────────────────────────────────────────────
+function markerColor(status) {
+  if (status === 'pickup_ready') return '#e17055';
+  if (status === 'delivered') return '#00b894';
+  return '#b2bec3';
+}
+
+function createPackageIcon(source, status, num) {
+  const color = markerColor(status);
+  const emoji = source === 'inpost' ? '📦' : '🛒';
+  const inner = num != null
+    ? `<div class="map-marker-num">${num}</div>`
+    : `<div class="map-marker-inner">${emoji}</div>`;
+  return L.divIcon({
+    html: `<div class="map-marker" style="background:${color}">${inner}</div>`,
+    className: '',
+    iconSize: [36, 36],
+    iconAnchor: [18, 36],
+    popupAnchor: [0, -38],
+  });
+}
+
+function createUserIcon() {
+  return L.divIcon({
+    html: `<div class="user-marker">📍</div>`,
+    className: '',
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
+  });
+}
+
+function popupHtml(pkg, routeNum) {
+  const numBadge = routeNum != null ? `<span style="background:#6c5ce7;color:#fff;padding:2px 8px;border-radius:10px;font-size:0.7rem;font-weight:700;">Przystanek ${routeNum}</span><br/>` : '';
+  return `
+    <div class="popup-content">
+      ${numBadge}
+      <h4>${pkg.source === 'inpost' ? '📦 InPost Paczkomat' : '🛒 Amazon'}</h4>
+      ${pkg.locker_id ? `<p><strong>Locker:</strong> ${pkg.locker_id}</p>` : ''}
+      ${pkg.pickup_code ? `<code class="popup-pickup-code">${pkg.pickup_code}</code>` : ''}
+      ${pkg.address_display ? `<p>📍 ${pkg.address_display}</p>` : ''}
+      <p class="popup-order" style="font-size:0.7rem;color:#b2bec3;">${pkg.tracking_number}</p>
+    </div>
+  `;
+}
+
+// ─── Toast ────────────────────────────────────────────────────────
+function Toast({ toasts }) {
+  return (
+    <div className="toast-container">
+      {toasts.map(t => (
+        <div key={t.id} className={`toast toast-${t.type}`}>{t.msg}</div>
+      ))}
+    </div>
+  );
+}
+
+// ─── StatusBadge ─────────────────────────────────────────────────
+const STATUS_LABELS = {
+  pickup_ready: 'Gotowa do odbioru',
+  delivered: 'Dostarczona',
+  in_transit: 'W drodze',
+  expired: 'Wygasła',
+};
+
+function StatusBadge({ status }) {
+  return <span className={`status-badge status-${status}`}>{STATUS_LABELS[status] || status}</span>;
+}
+
+// ─── PackageCard ──────────────────────────────────────────────────
+function PackageCard({ pkg, selected, onSelect, onDelete, routeNum }) {
+  const [codeVisible, setCodeVisible] = useState(false);
+
+  const dateStr = pkg.email_date
+    ? new Date(pkg.email_date).toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    : null;
+
+  return (
+    <div className={`package-card${selected ? ' selected' : ''}`} onClick={onSelect}>
+      <div className="card-header">
+        <span className="card-source-icon">{pkg.source === 'inpost' ? '📦' : '🛒'}</span>
+        <span className="card-title">{pkg.tracking_number}</span>
+        {routeNum != null && (
+          <span style={{ background: '#6c5ce7', color: '#fff', borderRadius: '10px', padding: '1px 7px', fontSize: '0.7rem', fontWeight: 700 }}>
+            #{routeNum}
+          </span>
+        )}
+        <button className="card-delete" title="Usuń" onClick={e => { e.stopPropagation(); onDelete(); }}>✕</button>
+      </div>
+
+      <StatusBadge status={pkg.status} />
+
+      {pkg.locker_id && (
+        <div className="card-locker">Locker: <strong>{pkg.locker_id}</strong></div>
+      )}
+      {pkg.address_display && (
+        <div className="card-address">📍 {pkg.address_display}</div>
+      )}
+
+      {pkg.pickup_code && (
+        <div className="card-code-row">
+          <span className="code-label">Kod odbioru:</span>
+          {codeVisible
+            ? <span className="code-value">{pkg.pickup_code}</span>
+            : <span className="code-hidden">••••••</span>
+          }
+          <button className="btn-reveal" onClick={e => { e.stopPropagation(); setCodeVisible(v => !v); }}>
+            {codeVisible ? 'Ukryj' : 'Pokaż'}
+          </button>
+        </div>
+      )}
+
+      {dateStr && <div className="card-date">{dateStr}</div>}
+    </div>
+  );
+}
+
+// ─── AccountsPanel ────────────────────────────────────────────────
+function AccountsPanel({ onToast }) {
+  const [accounts, setAccounts] = useState([]);
+  const [showForm, setShowForm] = useState(false);
+  const [testing, setTesting] = useState(null);
+  const [form, setForm] = useState({ label: '', email: '', imap_host: '', imap_port: 993, password: '' });
+
+  const load = () => api.get('/accounts').then(setAccounts).catch(e => onToast(e.message, 'error'));
+
+  useEffect(() => { load(); }, []);
+
+  const handleAdd = async () => {
+    if (!form.label || !form.email || !form.imap_host || !form.password) {
+      onToast('Wypełnij wszystkie pola', 'error'); return;
+    }
+    try {
+      await api.post('/accounts', form);
+      onToast('Konto dodane', 'success');
+      setShowForm(false);
+      setForm({ label: '', email: '', imap_host: '', imap_port: 993, password: '' });
+      load();
+    } catch (e) { onToast(e.message, 'error'); }
+  };
+
+  const handleDelete = async (id) => {
+    if (!confirm('Usunąć to konto?')) return;
+    await api.delete(`/accounts/${id}`);
+    onToast('Konto usunięte', 'info');
+    load();
+  };
+
+  const handleToggle = async (acc) => {
+    await api.patch(`/accounts/${acc.id}`, { is_active: !acc.is_active });
+    load();
+  };
+
+  const handleTest = async (acc) => {
+    setTesting(acc.id);
+    try {
+      const r = await api.post(`/accounts/${acc.id}/test`, {});
+      onToast(r.ok ? `Połączono z ${acc.email}` : `Błąd: ${r.error}`, r.ok ? 'success' : 'error');
+    } finally { setTesting(null); }
+  };
+
+  const IMAP_HOSTS = [
+    { label: 'Gmail', host: 'imap.gmail.com' },
+    { label: 'Outlook/Hotmail', host: 'imap-mail.outlook.com' },
+    { label: 'WP.pl', host: 'imap.wp.pl' },
+    { label: 'Onet.pl', host: 'imap.poczta.onet.pl' },
+    { label: 'o2.pl', host: 'imap.o2.pl' },
+    { label: 'Interia.pl', host: 'poczta.interia.pl' },
+  ];
+
+  return (
+    <div>
+      <div className="account-list">
+        {accounts.length === 0 && (
+          <div className="empty-state">
+            <div style={{ fontSize: '2rem' }}>📬</div>
+            <p>Brak kont email. Dodaj pierwsze.</p>
+          </div>
+        )}
+        {accounts.map(acc => (
+          <div key={acc.id} className={`account-row${!acc.is_active ? ' account-inactive' : ''}`}>
+            <div className="account-info">
+              <div className="account-label">{acc.label}</div>
+              <div className="account-email">{acc.email}</div>
+              <div className="account-meta">
+                {acc.imap_host}:{acc.imap_port}
+                {acc.last_polled_at && ` · Sync: ${new Date(acc.last_polled_at).toLocaleString('pl-PL')}`}
+              </div>
+            </div>
+            <button className="btn btn-sm btn-secondary" onClick={() => handleTest(acc)} disabled={testing === acc.id}>
+              {testing === acc.id ? '...' : 'Test'}
+            </button>
+            <button className="btn btn-sm btn-secondary" onClick={() => handleToggle(acc)}>
+              {acc.is_active ? 'Wyłącz' : 'Włącz'}
+            </button>
+            <button className="btn-icon" onClick={() => handleDelete(acc.id)}>🗑</button>
+          </div>
+        ))}
+      </div>
+
+      {!showForm ? (
+        <button className="btn btn-primary btn-sm" onClick={() => setShowForm(true)}>+ Dodaj konto</button>
+      ) : (
+        <div className="form-card">
+          <h3>Nowe konto email</h3>
+          <div className="form-field">
+            <label>Nazwa</label>
+            <input placeholder="Gmail Personal" value={form.label} onChange={e => setForm(f => ({ ...f, label: e.target.value }))} />
+          </div>
+          <div className="form-field">
+            <label>Adres email</label>
+            <input type="email" placeholder="user@gmail.com" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
+          </div>
+          <div className="form-field">
+            <label>Serwer IMAP</label>
+            <select value={form.imap_host} onChange={e => setForm(f => ({ ...f, imap_host: e.target.value }))}>
+              <option value="">Wybierz lub wpisz ręcznie...</option>
+              {IMAP_HOSTS.map(h => <option key={h.host} value={h.host}>{h.label} ({h.host})</option>)}
+            </select>
+          </div>
+          {!IMAP_HOSTS.find(h => h.host === form.imap_host) && (
+            <div className="form-field">
+              <label>Własny host IMAP</label>
+              <input placeholder="imap.example.com" value={form.imap_host} onChange={e => setForm(f => ({ ...f, imap_host: e.target.value }))} />
+            </div>
+          )}
+          <div className="form-field">
+            <label>Port IMAP</label>
+            <input type="number" value={form.imap_port} onChange={e => setForm(f => ({ ...f, imap_port: parseInt(e.target.value) || 993 }))} />
+          </div>
+          <div className="form-field">
+            <label>Hasło aplikacji</label>
+            <input type="password" placeholder="Hasło aplikacji (nie zwykłe hasło)" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} />
+          </div>
+          <div className="form-actions">
+            <button className="btn btn-primary btn-sm" onClick={handleAdd}>Dodaj</button>
+            <button className="btn btn-secondary btn-sm" onClick={() => setShowForm(false)}>Anuluj</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Header ───────────────────────────────────────────────────────
+function Header({ syncing, onSync, onLocate, onRoute, routeActive, onClearRoute, canRoute, userLocated }) {
+  return (
+    <div className="header">
+      <h1>Zy<span>lmus</span></h1>
+      <div className="header-actions">
+        <div className={`sync-dot${syncing ? ' syncing' : ''}`} title={syncing ? 'Synchronizacja...' : 'Zsynchronizowano'} />
+        <button className="btn btn-ghost btn-sm" onClick={onSync} disabled={syncing}>
+          {syncing ? '⟳ Sync...' : '⟳ Sync'}
+        </button>
+        <button
+          className="btn btn-ghost btn-sm"
+          onClick={onLocate}
+          title={userLocated ? 'Lokalizacja ustawiona' : 'Ustaw moją lokalizację'}
+          style={userLocated ? { borderColor: '#55efc4', color: '#55efc4' } : {}}
+        >
+          📍 {userLocated ? 'Zlokalizowany' : 'Moja lokalizacja'}
+        </button>
+        {routeActive ? (
+          <button className="btn btn-ghost btn-sm" onClick={onClearRoute} style={{ borderColor: '#ff7675', color: '#ff7675' }}>
+            ✕ Wyczyść trasę
+          </button>
+        ) : (
+          <button className="btn btn-ghost btn-sm" onClick={onRoute} disabled={!canRoute}>
+            🗺 Wyznacz trasę
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── LeafletMap ───────────────────────────────────────────────────
+function LeafletMap({ packages, selectedId, onSelectPackage, userLocation, route }) {
+  const containerRef = useRef(null);
+  const mapRef = useRef(null);
+  const markersRef = useRef({});
+  const userMarkerRef = useRef(null);
+  const routeLayerRef = useRef(null);
+
+  // Init map once
+  useEffect(() => {
+    if (mapRef.current) return;
+    const map = L.map(containerRef.current, { zoomControl: true }).setView([52.1, 19.4], 6);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      maxZoom: 19,
+    }).addTo(map);
+    mapRef.current = map;
+    return () => {
+      map.remove();
+      mapRef.current = null;
+    };
+  }, []);
+
+  // Sync markers when packages or route changes
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    // Build route order map: package_id → position number
+    const routeOrderMap = {};
+    if (route?.ordered_packages) {
+      route.ordered_packages.forEach((wp, idx) => {
+        routeOrderMap[wp.package_id] = idx + 1;
+      });
+    }
+
+    // Remove stale markers
+    const currentIds = new Set(packages.map(p => p.id));
+    Object.keys(markersRef.current).forEach(id => {
+      if (!currentIds.has(parseInt(id))) {
+        markersRef.current[id].remove();
+        delete markersRef.current[id];
+      }
+    });
+
+    // Add or update markers
+    packages.filter(p => p.lat && p.lon).forEach(pkg => {
+      const routeNum = routeOrderMap[pkg.id] ?? null;
+      const icon = createPackageIcon(pkg.source, pkg.status, routeNum);
+
+      if (markersRef.current[pkg.id]) {
+        markersRef.current[pkg.id].setIcon(icon);
+        markersRef.current[pkg.id].setPopupContent(popupHtml(pkg, routeNum));
+      } else {
+        const marker = L.marker([pkg.lat, pkg.lon], { icon })
+          .bindPopup(popupHtml(pkg, routeNum))
+          .addTo(map);
+        marker.on('click', () => onSelectPackage(pkg.id));
+        markersRef.current[pkg.id] = marker;
+      }
+    });
+  }, [packages, route]);
+
+  // Pan to selected package
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !selectedId) return;
+    const pkg = packages.find(p => p.id === selectedId);
+    if (pkg?.lat && pkg?.lon) {
+      map.flyTo([pkg.lat, pkg.lon], 16, { duration: 1.0 });
+      const marker = markersRef.current[selectedId];
+      if (marker) marker.openPopup();
+    }
+  }, [selectedId]);
+
+  // User location marker
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (userMarkerRef.current) {
+      userMarkerRef.current.remove();
+      userMarkerRef.current = null;
+    }
+    if (userLocation) {
+      const marker = L.marker([userLocation.lat, userLocation.lon], { icon: createUserIcon(), zIndexOffset: 1000 })
+        .bindPopup('<strong>Twoja lokalizacja</strong>')
+        .addTo(map);
+      userMarkerRef.current = marker;
+      map.flyTo([userLocation.lat, userLocation.lon], 13, { duration: 1.2 });
+    }
+  }, [userLocation]);
+
+  // Route polyline
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (routeLayerRef.current) {
+      routeLayerRef.current.remove();
+      routeLayerRef.current = null;
+    }
+    if (route?.geometry) {
+      const layer = L.geoJSON(route.geometry, {
+        style: { color: '#6c5ce7', weight: 4, opacity: 0.8, dashArray: '8,4' },
+      }).addTo(map);
+      routeLayerRef.current = layer;
+      try { map.fitBounds(layer.getBounds(), { padding: [40, 40] }); } catch (e) {}
+    }
+  }, [route]);
+
+  return <div id="map" ref={containerRef} style={{ flex: 1 }} />;
+}
+
+// ─── Main App ─────────────────────────────────────────────────────
+function App() {
+  const [packages, setPackages] = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
+  const [activeTab, setActiveTab] = useState('packages'); // 'packages' | 'accounts'
+  const [filters, setFilters] = useState({ status: 'all', source: 'all', search: '' });
+  const [syncing, setSyncing] = useState(false);
+  const [userLocation, setUserLocation] = useState(() => {
+    try { const s = localStorage.getItem('zylmus_user_loc'); return s ? JSON.parse(s) : null; } catch { return null; }
+  });
+  const [route, setRoute] = useState(null);
+  const [routeLoading, setRouteLoading] = useState(false);
+  const [toasts, setToasts] = useState([]);
+
+  const addToast = useCallback((msg, type = 'info') => {
+    const id = Date.now();
+    setToasts(t => [...t, { id, msg, type }]);
+    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 4000);
+  }, []);
+
+  const loadPackages = useCallback(() => {
+    const params = new URLSearchParams();
+    if (filters.status !== 'all') params.set('status', filters.status);
+    if (filters.source !== 'all') params.set('source', filters.source);
+    if (filters.search) params.set('search', filters.search);
+    api.get(`/packages?${params}`)
+      .then(data => setPackages(data.items || []))
+      .catch(e => addToast(e.message, 'error'));
+  }, [filters]);
+
+  useEffect(() => { loadPackages(); }, [loadPackages]);
+
+  // Auto-refresh packages every 30s
+  useEffect(() => {
+    const timer = setInterval(loadPackages, 30000);
+    return () => clearInterval(timer);
+  }, [loadPackages]);
+
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      await api.post('/sync', {});
+      addToast('Synchronizacja w toku...', 'info');
+      setTimeout(() => { loadPackages(); setSyncing(false); }, 5000);
+    } catch (e) {
+      addToast(e.message, 'error');
+      setSyncing(false);
+    }
+  };
+
+  const handleLocate = () => {
+    if (!navigator.geolocation) { addToast('Geolokalizacja niedostępna w tej przeglądarce', 'error'); return; }
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        const loc = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+        setUserLocation(loc);
+        localStorage.setItem('zylmus_user_loc', JSON.stringify(loc));
+        addToast('Lokalizacja ustawiona', 'success');
+        setRoute(null);
+      },
+      err => addToast(`Błąd lokalizacji: ${err.message}`, 'error'),
+      { enableHighAccuracy: true, timeout: 10000 },
+    );
+  };
+
+  const handleRoute = async () => {
+    if (!userLocation) { addToast('Najpierw ustaw swoją lokalizację', 'error'); return; }
+    setRouteLoading(true);
+    try {
+      const result = await api.post('/route', { user_lat: userLocation.lat, user_lon: userLocation.lon });
+      if (result.detail) throw new Error(result.detail);
+      setRoute(result);
+      addToast(`Trasa: ${result.total_distance_km} km · ~${Math.round(result.total_duration_min)} min · ${result.ordered_packages.length} paczek`, 'success');
+    } catch (e) {
+      addToast(`Błąd trasy: ${e.message}`, 'error');
+    } finally {
+      setRouteLoading(false);
+    }
+  };
+
+  const handleDeletePackage = async (id) => {
+    await api.delete(`/packages/${id}`);
+    setPackages(p => p.filter(pkg => pkg.id !== id));
+    if (selectedId === id) setSelectedId(null);
+    addToast('Paczka usunięta', 'info');
+  };
+
+  // Build route order map for sidebar badges
+  const routeOrderMap = {};
+  if (route?.ordered_packages) {
+    route.ordered_packages.forEach((wp, idx) => { routeOrderMap[wp.package_id] = idx + 1; });
+  }
+
+  // Sort packages by route order when route is active
+  const displayPackages = route?.ordered_packages
+    ? [...packages].sort((a, b) => {
+        const ra = routeOrderMap[a.id] ?? 999;
+        const rb = routeOrderMap[b.id] ?? 999;
+        return ra - rb;
+      })
+    : packages;
+
+  const pickupReadyWithCoords = packages.filter(p => p.status === 'pickup_ready' && p.lat && p.lon);
+
+  return (
+    <div className="app">
+      <Header
+        syncing={syncing || routeLoading}
+        onSync={handleSync}
+        onLocate={handleLocate}
+        onRoute={handleRoute}
+        onClearRoute={() => setRoute(null)}
+        routeActive={!!route}
+        canRoute={!!userLocation && pickupReadyWithCoords.length > 0}
+        userLocated={!!userLocation}
+      />
+
+      <div className="main">
+        <div className="sidebar">
+          <div className="sidebar-tabs">
+            <button className={`sidebar-tab${activeTab === 'packages' ? ' active' : ''}`} onClick={() => setActiveTab('packages')}>
+              Paczki ({packages.length})
+            </button>
+            <button className={`sidebar-tab${activeTab === 'accounts' ? ' active' : ''}`} onClick={() => setActiveTab('accounts')}>
+              Konta email
+            </button>
+          </div>
+
+          <div className="sidebar-content">
+            {activeTab === 'packages' && (
+              <>
+                <div className="filter-bar">
+                  <select value={filters.status} onChange={e => setFilters(f => ({ ...f, status: e.target.value }))}>
+                    <option value="all">Wszystkie statusy</option>
+                    <option value="pickup_ready">Gotowe do odbioru</option>
+                    <option value="in_transit">W drodze</option>
+                    <option value="delivered">Dostarczone</option>
+                    <option value="expired">Wygasłe</option>
+                  </select>
+                  <select value={filters.source} onChange={e => setFilters(f => ({ ...f, source: e.target.value }))}>
+                    <option value="all">Wszyscy dostawcy</option>
+                    <option value="inpost">InPost</option>
+                    <option value="amazon">Amazon</option>
+                  </select>
+                  <input
+                    placeholder="Szukaj..."
+                    value={filters.search}
+                    onChange={e => setFilters(f => ({ ...f, search: e.target.value }))}
+                  />
+                </div>
+
+                {displayPackages.length === 0 ? (
+                  <div className="empty-state">
+                    <div style={{ fontSize: '2.5rem' }}>📭</div>
+                    <p>Brak paczek. Dodaj konto email i zsynchronizuj.</p>
+                  </div>
+                ) : (
+                  <div className="package-list">
+                    {displayPackages.map(pkg => (
+                      <PackageCard
+                        key={pkg.id}
+                        pkg={pkg}
+                        selected={selectedId === pkg.id}
+                        routeNum={routeOrderMap[pkg.id] ?? null}
+                        onSelect={() => setSelectedId(selectedId === pkg.id ? null : pkg.id)}
+                        onDelete={() => handleDeletePackage(pkg.id)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+
+            {activeTab === 'accounts' && <AccountsPanel onToast={addToast} />}
+          </div>
+        </div>
+
+        <div className="map-panel">
+          <LeafletMap
+            packages={packages}
+            selectedId={selectedId}
+            onSelectPackage={id => setSelectedId(selectedId === id ? null : id)}
+            userLocation={userLocation}
+            route={route}
+          />
+
+          {route && (
+            <div className="route-info-bar">
+              🗺 Trasa: <span>{route.total_distance_km} km</span>
+              · <span>~{Math.round(route.total_duration_min)} min</span>
+              · <span>{route.ordered_packages.length} paczkomat{route.ordered_packages.length === 1 ? '' : 'ów'}</span>
+              <button className="btn btn-secondary btn-sm" onClick={() => setRoute(null)}>Wyczyść</button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <Toast toasts={toasts} />
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+
+  </script>
+</body>
+</html>
